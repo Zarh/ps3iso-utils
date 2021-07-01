@@ -1,6 +1,7 @@
 /* 
     (c) 2013 Estwald/Hermes <www.elotrolado.net>
-
+    (c) 2021 Zarh <github.com/Zarh>
+    
     MAKEPS3ISO is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
