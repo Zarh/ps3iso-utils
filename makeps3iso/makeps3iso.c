@@ -27,7 +27,7 @@
 
 int verbose = 0;
 
-#define TITLE "\nMAKEPS3ISO v2.0\n(c) 2021, Zar\n(c) 2013, Estwald (Hermes)\n\n"
+#define TITLE "\nMAKEPS3ISO v2.1\n(c) 2021, Zar\n(c) 2013, Estwald (Hermes)\n\n"
 
 #define SKIP_MM_FILES   1
 //#define NOPS3_UPDATE 1
