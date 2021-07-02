@@ -643,10 +643,7 @@ static int calc_entries(char *path, int parent)
         if(verbose) printf("\r%s    \r", &cycle_str[print_cycle][0]); print_cycle++; print_cycle&= 3;
 
         if(!S_ISDIR(s.st_mode)) {
-            #ifdef SET_REGION
-            files_number++;
-            #endif
-            
+        
             int lname = strlen(entry->d_name);
 
             if(lname >=6 && !strcmp(&entry->d_name[lname -6], ".66600")) { // build size of .666xx files
@@ -704,6 +701,10 @@ static int calc_entries(char *path, int parent)
                     if(len_string > 222) {closedir(dir); return -555;}
                 }
             }
+            
+            #ifdef SET_REGION
+            files_number++;
+            #endif
             
             int parts = s.st_size ? (int) ((((u64) s.st_size) + 0xFFFFF7FFULL)/0xFFFFF800ULL) : 1;
 
@@ -1249,40 +1250,10 @@ static int fill_entries(char *path1, char *path2, int level)
 
             if(stat(path1, &s)<0) {closedir(dir); return -669;}
             
-            if(S_ISDIR(s.st_mode)) {
-                path1[len] = 0;
-                continue;
-            }
-            
-            #ifdef SET_REGION
-            u8 found=need_encryption(path1);
-            files_count++;
-            if( found ) {
-                encrypted_files_sector = (u32 *) realloc(encrypted_files_sector, (encrypted_files_number+1) * sizeof(u32));
-                encrypted_files_size = (u32 *) realloc(encrypted_files_size, (encrypted_files_number+1) * sizeof(u32));
-                
-                // first  file of encrypted region
-                if( is_encrypted == 0) {
-                    flba= (flba + 31) & ~31;
-                    is_encrypted = 1;
-                }
-                
-                encrypted_files_size[encrypted_files_number] = ((s.st_size + 2047)/2048);
-                encrypted_files_sector[encrypted_files_number] = flba;
-                
-                encrypted_files_number++;
-            }
-            
-            // last file of encrypted region
-            if( is_encrypted && found==0) {
-                is_encrypted = 0;
-                flba= (flba + 31) & ~31;
-                encrypted_files_size[encrypted_files_number-1] = flba - encrypted_files_sector[encrypted_files_number-1];
-            }
-            #endif
-            
             path1[len] = 0;
              
+            if(S_ISDIR(s.st_mode)) continue;
+            
             //printf("\r2 %s    \r", &cycle_str[print_cycle][0]); print_cycle++; print_cycle&= 3;
 
             int lname = strlen(entry->d_name);
@@ -1339,7 +1310,37 @@ static int fill_entries(char *path1, char *path2, int level)
 
                     if(len_string > 222) {closedir(dir); return -555;}
             }
-
+            
+            #ifdef SET_REGION
+                strcat(path1,"/");
+                strcat(path1, entry->d_name);
+                
+                u8 found=need_encryption(path1);
+                files_count++;
+                if( found ) {
+                    encrypted_files_sector = (u32 *) realloc(encrypted_files_sector, (encrypted_files_number+1) * sizeof(u32));
+                    encrypted_files_size = (u32 *) realloc(encrypted_files_size, (encrypted_files_number+1) * sizeof(u32));
+                    
+                    // first  file of encrypted region
+                    if( is_encrypted == 0) {
+                        flba= (flba + 31) & ~31;
+                        is_encrypted = 1;
+                    }
+                    
+                    encrypted_files_size[encrypted_files_number] = ((s.st_size + 2047)/2048);
+                    encrypted_files_sector[encrypted_files_number] = flba;
+                    
+                    encrypted_files_number++;
+                }
+                // last file of encrypted region
+                if( is_encrypted && found==0) {
+                    is_encrypted = 0;
+                    flba= (flba + 31) & ~31;
+                    encrypted_files_size[encrypted_files_number-1] = flba - encrypted_files_sector[encrypted_files_number-1];
+                }
+                path1[len]=0;
+            #endif
+           
             int parts = s.st_size ? (u32) ((((u64) s.st_size) + 0xFFFFF7FFULL)/0xFFFFF800ULL) : 1;
 
             int n;
