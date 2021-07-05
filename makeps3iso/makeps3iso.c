@@ -25,13 +25,9 @@
 #include <time.h>
 #include <ctype.h>
 
-int verbose = 0;
-
 #define TITLE "\nMAKEPS3ISO v2.2\n(c) 2021, Zar\n(c) 2013, Estwald (Hermes)\n\n"
 
 #define SKIP_MM_FILES   1
-//#define NOPS3_UPDATE 1
-#define SET_REGION 1
 
 #if defined (__MSVCRT__)
 #define stat _stati64
@@ -50,33 +46,29 @@ What's missing from original ISO ?
  - force PS3UPDATE to be the last file
 */
 
-#ifdef SET_REGION
-    
-    #define ArrayCount(x) (sizeof(x)/sizeof(x[0]))
-    u32 encrypted_files_number=0;
-    u32 *encrypted_files_sector=NULL;
-    u32 *encrypted_files_size=NULL;
-    u8 is_encrypted=0;
-    u32 files_number=0;
-    u32 files_count=0;
 
-    /*
-        Comment USE_DIRNAME to only encrypt SELF and LIC.DAT using their magic number.
-        genPS3iso encrypt only those two type of files.
-        
-        But from what I saw from ird headers, most of the time,
-        all the content of USRDIR/LICDIR/TROPDIR are completely encrypted.
-    */
-    #define USE_DIRNAME 1
-    #ifdef USE_DIRNAME
-        #define encrypted_directories_number 3
-        char *encrypted_directories[encrypted_directories_number] = {"USRDIR", "LICDIR", "TROPDIR"};
-    #else
-        #define encrypted_files_magic_number 2
-        u8 *encrypted_files_magic[encrypted_files_magic_number] = {(u8 *) "SCE\0", (u8 *) "PS3LICDA"}; // max len 0x10
-    #endif
+#define ArrayCount(x) (sizeof(x)/sizeof(x[0]))
+u32 encrypted_files_number=0;
+u32 *encrypted_files_sector=NULL;
+u32 *encrypted_files_size=NULL;
+u8 is_encrypted=0;
+u32 files_number=0;
+u32 files_count=0;
 
-#endif
+#define encrypted_directories_number 3
+char *encrypted_directories[encrypted_directories_number] = {"USRDIR", "LICDIR", "TROPDIR"};
+
+#define encrypted_files_magic_number 2
+u8 *encrypted_files_magic[encrypted_files_magic_number] = {(u8 *) "SCE\0", (u8 *) "PS3LICDA"}; // max len 0x10
+
+
+// OPTIONS
+int verbose = 0;
+int align_32sectors = 0;
+int use_folder_name = 0;
+int no_region  = 0;
+int no_pup = 0;
+int iso_split = 0;
 
 static int get_input_char()
 {
@@ -451,7 +443,6 @@ static u32 dwsz = 0; // dir entriesw size (sectors)
 static u32 flba = 0; // first lba for files
 static u32 toc = 0;  // TOC of the iso
 
-static char iso_split = 0;
 static char output_name[0x420];
 
 static int pos_lpath0 = 0;
@@ -624,9 +615,9 @@ static int calc_entries(char *path, int parent)
 
         int len = strlen(path);
         
-        #ifdef NOPS3_UPDATE
+        if( no_pup ) {
             if(!strcmp(&path[len - 10], "PS3_UPDATE")) continue;
-        #endif
+        }
         #ifdef SKIP_MM_FILES
         if(!strcmp(path, "/PS3_GAME")) {
            if( !strncmp(entry->d_name, "PS3GAME.", 8) ) continue;
@@ -702,9 +693,7 @@ static int calc_entries(char *path, int parent)
                 }
             }
             
-            #ifdef SET_REGION
             files_number++;
-            #endif
             
             int parts = s.st_size ? (int) ((((u64) s.st_size) + 0xFFFFF7FFULL)/0xFFFFF800ULL) : 1;
 
@@ -763,9 +752,9 @@ static int calc_entries(char *path, int parent)
 
             int len = strlen(path);
             
-            #ifdef NOPS3_UPDATE
-            if(!strcmp(&path[len - 10], "PS3_UPDATE")) continue;
-            #endif
+            if( no_pup ) {
+                if(!strcmp(&path[len - 10], "PS3_UPDATE")) continue;
+            }
             #ifdef SKIP_MM_FILES
             if(!strcmp(path, "/PS3_GAME")) {
                if( !strncmp(entry->d_name, "PS3GAME.", 8) ) continue;
@@ -856,9 +845,9 @@ static int calc_entries(char *path, int parent)
         
         int len = strlen(path);
         
-        #ifdef NOPS3_UPDATE
-        if(!strcmp(&path[len - 10], "PS3_UPDATE")) continue;
-        #endif
+        if( no_pup ) {
+            if(!strcmp(&path[len - 10], "PS3_UPDATE")) continue;
+        }
         #ifdef SKIP_MM_FILES
         if(!strcmp(path, "/PS3_GAME")) {
            if( !strncmp(entry->d_name, "PS3GAME.", 8) ) continue;
@@ -931,13 +920,13 @@ static int calc_entries(char *path, int parent)
             dwsz+= directory_iso[n].wdir;
         }
 
-        #ifdef SET_REGION
-        dwlba = ((dllba + dlsz) + 31) & ~31;
-        flba = ((dwlba + dwsz) + 31) & ~31;
-        #else
-        dwlba = (dllba + dlsz);
-        flba = (dwlba + dwsz);
-        #endif
+        if( !no_region ) {
+            dwlba = ((dllba + dlsz) + 31) & ~31;
+            flba = ((dwlba + dwsz) + 31) & ~31;
+        } else {
+            dwlba = (dllba + dlsz);
+            flba = (dwlba + dwsz);
+        }
 
         u32 lba0 = dllba;
         u32 lba1 = dwlba;
@@ -1066,11 +1055,10 @@ static int fill_dirpath(void)
     return 0;
 }
 
-#ifdef SET_REGION
 u8 need_encryption(char *path1)
 {
-    #ifdef USE_DIRNAME
-        char *PS3_G = strstr(path1, "/PS3_G");
+    if( use_folder_name ) {
+         char *PS3_G = strstr(path1, "/PS3_G");
         if(PS3_G==NULL) return 0;
         
         int len = strlen(PS3_G);
@@ -1082,7 +1070,7 @@ u8 need_encryption(char *path1)
                 }
             }
         }
-    #else
+    } else {
         FILE *fm = fopen(path1, "rb");
         if(fm == NULL) return 0;
         
@@ -1099,11 +1087,10 @@ u8 need_encryption(char *path1)
                 }
             }
         }
-    #endif
+    }
     
     return 0;
 }
-#endif
 
 static int fill_entries(char *path1, char *path2, int level)
 {
@@ -1236,9 +1223,9 @@ static int fill_entries(char *path1, char *path2, int level)
             
             int len = strlen(path1);
             
-            #ifdef NOPS3_UPDATE
-            if(!strcmp(&path1[len - 10], "PS3_UPDATE")) continue;
-            #endif
+            if( no_pup ) {
+                if(!strcmp(&path1[len - 10], "PS3_UPDATE")) continue;
+            }
             #ifdef SKIP_MM_FILES
             if(!strcmp(path2, "/PS3_GAME")) {
                if( !strncmp(entry->d_name, "PS3GAME.", 8) ) continue;
@@ -1311,7 +1298,7 @@ static int fill_entries(char *path1, char *path2, int level)
                     if(len_string > 222) {closedir(dir); return -555;}
             }
             
-            #ifdef SET_REGION
+            if( !no_region ) {
                 strcat(path1,"/");
                 strcat(path1, entry->d_name);
                 
@@ -1322,13 +1309,17 @@ static int fill_entries(char *path1, char *path2, int level)
                     encrypted_files_size = (u32 *) realloc(encrypted_files_size, (encrypted_files_number+1) * sizeof(u32));
                     
                     // first  file of encrypted region
-                    if( is_encrypted == 0) {
+                    if( is_encrypted == 0 || align_32sectors) {
                         flba= (flba + 31) & ~31;
                         is_encrypted = 1;
                     }
                     
                     encrypted_files_size[encrypted_files_number] = ((s.st_size + 2047)/2048);
                     encrypted_files_sector[encrypted_files_number] = flba;
+                    
+                    if( align_32sectors ) {
+                        encrypted_files_size[encrypted_files_number] = (encrypted_files_size[encrypted_files_number] + 31) & ~31;
+                    }
                     
                     encrypted_files_number++;
                 }
@@ -1339,7 +1330,8 @@ static int fill_entries(char *path1, char *path2, int level)
                     encrypted_files_size[encrypted_files_number-1] = flba - encrypted_files_sector[encrypted_files_number-1];
                 }
                 path1[len]=0;
-            #endif
+            }
+            
             int parts = s.st_size ? (u32) ((((u64) s.st_size) + 0xFFFFF7FFULL)/0xFFFFF800ULL) : 1;
 
             int n;
@@ -1457,7 +1449,7 @@ static int fill_entries(char *path1, char *path2, int level)
                 idrw->name[len_string * 2 + 3] = '1';
                 idrw = (void *) ((char *) idrw) + idrw->length[0];
                 
-                #ifdef SET_REGION
+                if( !no_region ) {
                     // lets dummy files take 1 sector to avoid confusion
                     if(fsize==0) fsize=1;
                     flba+= ((fsize + 2047) & ~2047) / 2048;
@@ -1466,9 +1458,9 @@ static int fill_entries(char *path1, char *path2, int level)
                        flba = (flba + 31) & ~31;
                        encrypted_files_size[encrypted_files_number-1] = flba - encrypted_files_sector[encrypted_files_number-1];
                     }
-                #else
+                } else {
                     flba+= ((fsize + 2047) & ~2047) / 2048;
-                #endif
+                }
             }
 
         }
@@ -1758,24 +1750,24 @@ static int build_file_iso(FILE *fp, char *path1, char *path2, int level)
             
             u32 flba0 = flba;
             
-            #ifdef SET_REGION
-            u8 found=need_encryption(path1);
-            files_count++;
-            if( found ) {
-                // first  file of encrypted region
-                if( is_encrypted == 0) {
-                    flba= (flba + 31) & ~31;
-                    is_encrypted = 1;
+            if( !no_region ) {
+                u8 found=need_encryption(path1);
+                files_count++;
+                if( found ) {
+                    // first  file of encrypted region
+                    if( is_encrypted == 0 || align_32sectors) {
+                        flba= (flba + 31) & ~31;
+                        is_encrypted = 1;
+                    }
+                }
+                // last file of encrypted region
+                if( is_encrypted ) {
+                    if( found==0) {
+                        is_encrypted = 0;
+                        flba= (flba + 31) & ~31;
+                    }
                 }
             }
-            // last file of encrypted region
-            if( is_encrypted ) {
-                if( found==0) {
-                    is_encrypted = 0;
-                    flba= (flba + 31) & ~31;
-                }
-            }
-            #endif
             
             if(flba0 < flba) {
                 //printf("gap: %i\n", (flba - flba0));
@@ -1994,6 +1986,33 @@ static void fixtitle(char *p)
     }
 }
 
+void print_help()
+{
+    printf(TITLE);
+    
+        printf( "%s", "Usage:\n"
+                "    Format:\n"
+                "        makeps3iso [options] <input> [output]\n"
+                "    Description :\n"
+                "        A tool to create PS3 ISO\n"
+                "    Options:\n"
+                "        -s, --iso_split            Split files to 4GB (.iso.0, .iso.1, ...)\n"
+                "        -n, --no_pup               Do not include PS3_UPDATE to the ISO\n"
+                "        -r, --no_region            Do not define plain/encrypted regions. See note (2).\n"
+                "        -f, --use_folder_name      Use parent folder name to detect if the file is 'encrypted', see notes (3) & (4)\n"
+                "        -a, --align_32sectors      32 sectors (64KB) align every encrypted files, see note (3)\n"
+                "        -v, --verbose              Make the operation more talkative\n"
+                "        -h, --help                 This help text\n"
+                "    Arguments:\n"
+                "        <input>                    Path of an input folder, PS3 JB backup\n"
+                "        [output]                   Path of an output file, PS3 ISO backup\n"
+                "    Note :\n"
+                "        (1) If no options and arguments are specified, it will prompt the user the input data\n"
+                "        (2) It doesn't really encrypt the files, even if they are inside an encrypted region\n"
+                "        (3) This option is ignored if --no_region is defined\n"
+                "        (4) If it's not defined, it uses magic number of files."
+            );
+}
 
 int main(int argc, const char* argv[])
 {
@@ -2015,29 +2034,52 @@ int main(int argc, const char* argv[])
         return -1;
     }
 
+    //default value
+    verbose = 0;
+    align_32sectors = 0;
+    use_folder_name = 0;
+    no_region  = 0;
+    no_pup = 0;
+    iso_split = 0;
     
-    if(argc > 1 && (!strcmp(argv[1], "/?") || !strcmp(argv[1], "--help"))) {
-
-        printf(TITLE);
-    
-        printf("%s", "Usage:\n\n"
-               "    makeps3iso                                     -> input datas from the program\n"
-               "    makeps3iso <pathfiles>                         -> default ISO name\n"
-               "    makeps3iso <pathfiles> <ISO file or folder>    -> file or folder destination\n"
-               "    makeps3iso -p0 <pathfiles> <ISO file or folder> -> file or folder destination (frontend)\n"
-               "    makeps3iso -s <pathfiles>                      -> split files to 4GB\n"
-               "    makeps3iso -s <pathfiles> <ISO file or folder> -> split files to 4GB\n"
-               "    makeps3iso -p0 -s <pathfiles> <ISO file or folder> -> split files to 4GB (frontend)\n");
-               
-        return 0;
+    int i;
+    for(i=1; i<argc; i++) {
+        if( !strcmp(argv[i], "-s") || !strcmp(argv[i], "--iso_split") ) {
+            arg_split='y';
+            iso_split=1;
+            a++;
+        } else 
+        if( !strcmp(argv[i], "-a") || !strcmp(argv[i], "--align_32sectors") ) {
+            align_32sectors=1;
+            a++;
+        } else 
+        if( !strcmp(argv[i], "-n") || !strcmp(argv[i], "--no_pup") ) {
+            no_pup=1;
+            a++;
+        } else 
+        if( !strcmp(argv[i], "-r") || !strcmp(argv[i], "--no_region") ) {
+            no_region=1;
+            a++;
+        } else 
+        if( !strcmp(argv[i], "-f") || !strcmp(argv[i], "--use_folder_name") ) {
+            use_folder_name=1;
+            a++;
+        } else 
+        if( !strcmp(argv[i], "-v") ||  !strcmp(argv[i], "--verbose") ) {
+            verbose=1;
+            a++;
+        } else
+        if( !strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+            print_help();
+            return 0;
+        } else
+        if( !strcmp(argv[i], "-p0") ) { // to support old version
+            verbose=0;
+            a++;
+        }
     }
-
-    if(argc > 1 && (!strcmp(argv[a + 1], "-s") || !strcmp(argv[a + 1], "-S"))) {a++; arg_split = 'y';}
-    if(argc > 1 && (!strcmp(argv[a + 1], "-p0") || !strcmp(argv[a + 1], "-P0"))) {a++; verbose = 0;}
-    if(argc > 1 && (!strcmp(argv[a + 1], "-s") || !strcmp(argv[a + 1], "-S"))) {a++; arg_split = 'y';}
-
     if(verbose) printf(TITLE);
-
+    
     if(argc == 1) {
         printf("Enter Path Folder:\n");
         if(fgets(path1, 0x420, stdin)==0) {
@@ -2154,9 +2196,8 @@ int main(int argc, const char* argv[])
     
     int ret;
 
-#ifdef SET_REGION
     files_number=0;
-#endif
+    
     ret = calc_entries(path1, 1);
     if(ret < 0 ) {
         switch(ret) {
@@ -2217,10 +2258,11 @@ int main(int argc, const char* argv[])
     pos_wpath1 = wlba1 * 2048;
 
     path2[0] = 0;
-#ifdef SET_REGION
+    
+    // region
     is_encrypted=0;
     files_count=0;
-#endif
+    
     ret = fill_entries(path1, path2, 0);
 
     if(ret < 0 ) {
@@ -2252,13 +2294,13 @@ int main(int argc, const char* argv[])
         }
     }
    
-#ifdef SET_REGION
-    // add a footer (empty)
-    if( flba == ((flba + 31) & ~31) ) {
-        flba+=1; 
+    if( !no_region ) {
+        // add a footer (empty)
+        if( flba == ((flba + 31) & ~31) ) {
+            flba+=1; 
+        }
+        flba= (flba + 31) & ~31;
     }
-    flba= (flba + 31) & ~31;
-#endif
 
     toc = flba;
 
@@ -2267,40 +2309,40 @@ int main(int argc, const char* argv[])
         goto err;
     }
     
-#ifdef SET_REGION
-    u32 plain_number = 1;
-    u8 is_plain = 1;
-    set732((void *) &sectors[plain_number * 8], 0); // start of plain
-    int i;
-    for(i=0; i<encrypted_files_number; i++) {
-        if( is_plain ) {
-            is_plain = 0;
-            set732((void *) &sectors[plain_number * 8 + 4], encrypted_files_sector[i] - 1); // end of plain
-        }
-        if( !is_plain ) {
-            if( i+1 < encrypted_files_number) {
-                if( encrypted_files_sector[i] + encrypted_files_size[i] < encrypted_files_sector[i+1] ) {
+    if( !no_region ) {
+        u32 plain_number = 1;
+        u8 is_plain = 1;
+        set732((void *) &sectors[plain_number * 8], 0); // start of plain
+        int i;
+        for(i=0; i<encrypted_files_number; i++) {
+            if( is_plain ) {
+                is_plain = 0;
+                set732((void *) &sectors[plain_number * 8 + 4], encrypted_files_sector[i] - 1); // end of plain
+            }
+            if( !is_plain ) {
+                if( i+1 < encrypted_files_number) {
+                    if( encrypted_files_sector[i] + encrypted_files_size[i] < encrypted_files_sector[i+1] ) {
+                        plain_number++;
+                        set732((void *) &sectors[plain_number * 8], encrypted_files_sector[i] + encrypted_files_size[i]); // start of plain
+                        is_plain=1;
+                    }
+                } else
+                if( i+1 == encrypted_files_number) {
                     plain_number++;
-                    set732((void *) &sectors[plain_number * 8], encrypted_files_sector[i] + encrypted_files_size[i]); // start of plain
+                    set732((void *) &sectors[plain_number * 8], encrypted_files_sector[i] + encrypted_files_size[i]); // start of last plain
                     is_plain=1;
                 }
-            } else
-            if( i+1 == encrypted_files_number) {
-                plain_number++;
-                set732((void *) &sectors[plain_number * 8], encrypted_files_sector[i] + encrypted_files_size[i]); // start of last plain
-                is_plain=1;
             }
         }
+        set732((void *) &sectors[plain_number * 8 + 4], toc - 1); // end of last plain
+        sectors[0x3] = plain_number;
+        is_encrypted = 0;
+        files_count=0;
+    } else {
+        sectors[0x3] = 1; // one range
+        set732((void *) &sectors[0x8], 0); // first unencrypted sector
+        set732((void *) &sectors[0xC], toc - 1); // last unencrypted sector
     }
-    set732((void *) &sectors[plain_number * 8 + 4], toc - 1); // end of last plain
-    sectors[0x3] = plain_number;
-    is_encrypted = 0;
-    files_count=0;
-#else
-    sectors[0x3] = 1; // one range
-    set732((void *) &sectors[0x8], 0); // first unencrypted sector
-    set732((void *) &sectors[0xC], toc - 1); // last unencrypted sector
-#endif
     strcpy((void *) &sectors[0x800], "PlayStation3");
 
     memset((void *) &sectors[0x810], 32, 0x20);
@@ -2499,10 +2541,14 @@ int main(int argc, const char* argv[])
     free(directory_iso);
     free(sectors);
 
-#ifdef SET_REGION
-    if(encrypted_files_sector) free(encrypted_files_sector);
-    if(encrypted_files_size) free(encrypted_files_size);
-#endif
+    if(encrypted_files_sector) {
+        free(encrypted_files_sector);
+        encrypted_files_sector=NULL;
+    }
+    if(encrypted_files_size) {
+        free(encrypted_files_size); 
+        encrypted_files_size=NULL;
+    }
 
     t_finish = clock();    
 
@@ -2530,10 +2576,8 @@ err:
 
     if(sectors) free(sectors);
     
-#ifdef SET_REGION
     if(encrypted_files_sector) free(encrypted_files_sector);
     if(encrypted_files_size) free(encrypted_files_size);
-#endif
     
     printf("\nPress ENTER key to exit\n");
     get_input_char();
