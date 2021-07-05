@@ -27,7 +27,7 @@
 
 int verbose = 0;
 
-#define TITLE "\nMAKEPS3ISO v2.1\n(c) 2021, Zar\n(c) 2013, Estwald (Hermes)\n\n"
+#define TITLE "\nMAKEPS3ISO v2.2\n(c) 2021, Zar\n(c) 2013, Estwald (Hermes)\n\n"
 
 #define SKIP_MM_FILES   1
 //#define NOPS3_UPDATE 1
@@ -1340,7 +1340,6 @@ static int fill_entries(char *path1, char *path2, int level)
                 }
                 path1[len]=0;
             #endif
-           
             int parts = s.st_size ? (u32) ((((u64) s.st_size) + 0xFFFFF7FFULL)/0xFFFFF800ULL) : 1;
 
             int n;
@@ -1756,11 +1755,6 @@ static int build_file_iso(FILE *fp, char *path1, char *path2, int level)
             else {
                 if(strlen(entry->d_name) > 222) {path1[len] = 0; closedir(dir); return -555;}
             }
-
-            FILE * fp2 = fopen(path1, "rb");
-            path1[len] = 0;
-
-            if(!fp2) {closedir(dir); return -666;}
             
             u32 flba0 = flba;
             
@@ -1783,7 +1777,7 @@ static int build_file_iso(FILE *fp, char *path1, char *path2, int level)
             }
             #endif
             
-            if(flba0 != flba) {
+            if(flba0 < flba) {
                 //printf("gap: %i\n", (flba - flba0));
                 
                 int f = (flba - flba0);
@@ -1796,15 +1790,17 @@ static int build_file_iso(FILE *fp, char *path1, char *path2, int level)
                     if(f > 128) f2 = 128; else f2 = f;
                   
                     int ret = write_split(fp, flba + z, sectors, f2, 1);
-                    if(ret < 0) {
-                        fclose(fp2); closedir(dir); return ret;
-
-                    } 
+                    if(ret < 0) {path1[len] = 0; closedir(dir); return ret;} 
 
                     f -= f2;
                     z += f2;
                 }
             }
+            
+            FILE * fp2 = fopen(path1, "rb");
+            path1[len] = 0;
+
+            if(!fp2) {closedir(dir); return -666;}
             
             if(is_file_split) {
                 if(s.st_size < 1024ULL) 
