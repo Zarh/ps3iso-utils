@@ -2,6 +2,7 @@
 [![License](https://img.shields.io/github/license/bucanero/ps3iso-utils.svg)](./LICENSE)
 
 Fork of Estwald's PS3 ISO Tools (v 1.39) with quality-of-life improvements and features related to ODE ISOs (makeps3iso), by Zar.
+
 Contains a few build patches by Bucanero.
 
 **Note:** Use `--help` or `/?` as parameter to see the usage information
@@ -20,7 +21,7 @@ Options:
     -f, --use_folder_name      Use parent folder name to detect if the file is 'encrypted', see notes (3) & (4)
     -a, --align_32sectors      32 sectors (64KB) align every encrypted files, see note (3)
     -v, --verbose              Make the operation more talkative
-    -h, --help                 This help text
+    -h, --help                 Prints a help text to the console
     -i, --output_id            Includes game ID as part of output ISO name.
     
 Arguments:
