@@ -12,7 +12,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    apayloadlong with EXTRACTPS3ISO.  If not, see <http://www.gnu.org/licenses/>.
+    along with EXTRACTPS3ISO.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
@@ -559,7 +559,7 @@ int main(int argc, const char* argv[])
     }
 
     u32 lba0 = isonum_731(&sect_descriptor.type_l_path_table[0]); // lba
-    u32 size0 = isonum_733(&sect_descriptor.path_table_size[0]); // tamaño
+    u32 size0 = isonum_733(&sect_descriptor.path_table_size[0]); // tamaÃ±o
     //printf("lba0 %u size %u %u\n", lba0, size0, ((size0 + 2047)/2048) * 2048);
     
     if(fseeko64(fp, lba0 * 2048, SEEK_SET)<0) {
