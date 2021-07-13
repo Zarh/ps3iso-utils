@@ -13,7 +13,7 @@
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    apayloadlong with MAKEPS3ISO.  If not, see <http://www.gnu.org/licenses/>.
+    along with MAKEPS3ISO.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
@@ -69,6 +69,7 @@ int use_folder_name = 0;
 int no_region  = 0;
 int no_pup = 0;
 int iso_split = 0;
+int output_id = 0;
 
 static int get_input_char()
 {
@@ -2003,6 +2004,7 @@ void print_help()
                 "        -a, --align_32sectors      32 sectors (64KB) align every encrypted files, see note (3)\n"
                 "        -v, --verbose              Make the operation more talkative\n"
                 "        -h, --help                 This help text\n"
+                "        -i, --output_id            Includes game ID as part of output ISO name.\n"
                 "    Arguments:\n"
                 "        <input>                    Path of an input folder, PS3 JB backup\n"
                 "        [output]                   Path of an output file, PS3 ISO backup\n"
@@ -2010,7 +2012,7 @@ void print_help()
                 "        (1) If no options and arguments are specified, it will prompt the user the input data\n"
                 "        (2) It doesn't really encrypt the files, even if they are inside an encrypted region\n"
                 "        (3) This option is ignored if --no_region is defined\n"
-                "        (4) If it's not defined, it uses magic number of files."
+                "        (4) If it's not defined, it uses magic number of files.\n"
             );
 }
 
@@ -2041,6 +2043,7 @@ int main(int argc, const char* argv[])
     no_region  = 0;
     no_pup = 0;
     iso_split = 0;
+    output_id = 0;
     
     int i;
     for(i=1; i<argc; i++) {
@@ -2067,6 +2070,10 @@ int main(int argc, const char* argv[])
         } else 
         if( !strcmp(argv[i], "-v") ||  !strcmp(argv[i], "--verbose") ) {
             verbose=1;
+            a++;
+        } else
+        if( !strcmp(argv[i], "-i") || !strcmp(argv[i], "--output_id")) {
+            output_id=1;
             a++;
         } else
         if( !strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
@@ -2103,8 +2110,8 @@ int main(int argc, const char* argv[])
         utf8_to_ansiname(output_name, path2, 32);
         path2[32]= 0;
         fixtitle(path2);
-        strcat(path2, "-");
-        strcat(path2, title_id);
+        //strcat(path2, "-");
+        //strcat(path2, title_id);
     }
 
     if(argc == 1) {
@@ -2149,9 +2156,16 @@ int main(int argc, const char* argv[])
 
     nlen = strlen(output_name);
 
-    if(nlen < 4 || (strcmp(&output_name[nlen - 4], ".iso") && strcmp(&output_name[nlen - 4], ".ISO"))) {
-        strcat(output_name, ".iso");
+    if(!(nlen < 4 || (strcmp(&output_name[nlen - 4], ".iso") && strcmp(&output_name[nlen - 4], ".ISO")))) {
+        output_name[nlen-4]=0;
     }
+    if(output_id){
+        strcat(output_name, " ");
+        strcat(output_name, "[");
+        strcat(output_name, title_id);
+        strcat(output_name, "]");
+    }
+    strcat(output_name, ".iso");
 
     if(argc < 2) printf("\nSplit in 4GB parts? (y/n):\n");
     
@@ -2377,7 +2391,7 @@ int main(int argc, const char* argv[])
     idr->length[0]=34;
     idr->ext_attr_length[0]=0;
     set733(&idr->extent[0], directory_iso[0].llba); //lba
-    set733(&idr->size[0], directory_iso[0].ldir * 2048); // tamaño
+    set733(&idr->size[0], directory_iso[0].ldir * 2048); // tamaÃ±o
     //setdaterec(&idr->date[0],dd,mm,aa,ho,mi,se);
     struct iso_directory_record * aisdr = (void *) &sectors[directory_iso[0].llba * 2048];
     memcpy(idr->date, aisdr->date, 7);
@@ -2459,7 +2473,7 @@ int main(int argc, const char* argv[])
     idr->length[0]=34;
     idr->ext_attr_length[0]=0;
     set733(&idr->extent[0], directory_iso[0].wlba); //lba
-    set733(&idr->size[0], directory_iso[0].wdir * 2048); // tamaño
+    set733(&idr->size[0], directory_iso[0].wdir * 2048); // tamaÃ±o
     //setdaterec(&idr->date[0],dd,mm,aa,ho,mi,se);
     aisdr = (void *) &sectors[directory_iso[0].wlba * 2048];
     memcpy(idr->date, aisdr->date, 7);
